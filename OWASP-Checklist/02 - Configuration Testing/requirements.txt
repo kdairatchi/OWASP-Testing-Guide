@@ -1,0 +1,31 @@
+# Core dependencies
+requests>=2.28.1
+python-dateutil>=2.8.2
+pyyaml>=6.0
+cryptography>=38.0.1
+pyOpenSSL>=22.1.0
+urllib3>=1.26.12
+beautifulsoup4>=4.11.1
+lxml>=4.9.1
+
+# Cloud security tools
+boto3>=1.24.70
+azure-cli-core>=2.40.0
+google-api-python-client>=2.62.0
+cloudsploit>=1.0.0
+
+# Web security testing
+zapcli>=0.10.0
+python-owasp-zap-v2.4>=0.0.20
+wfuzz>=3.1.0
+sqlmap-api>=0.0.4
+
+# Network security
+python-nmap>=0.7.1
+dnspython>=2.2.1
+netaddr>=0.8.0
+
+# Report generation
+jinja2>=3.1.2
+markdown>=3.4.1
+pygments>=2.13.0
