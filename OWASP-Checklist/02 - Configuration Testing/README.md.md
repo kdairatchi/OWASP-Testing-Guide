@@ -100,3 +100,227 @@ Configuration testing focuses on analyzing the security of application infrastru
 - Note deviations from security best practices  
 - Maintain evidence of testing  
 - Consider compliance requirements
+
+
+# OWASP Automated Testing Framework
+
+A comprehensive automated testing framework for OWASP security testing that integrates multiple security tools.
+
+## Features
+
+- Automated testing for all OWASP testing categories:
+  - Network Infrastructure Configuration
+  - Application Platform Configuration
+  - File Extensions Handling
+  - Backup and Unreferenced Files
+  - Admin Interfaces
+  - HTTP Methods
+  - HTTP Security Headers
+  - Cross Domain Policy
+  - File Permissions
+  - Subdomain Takeover
+  - Cloud Storage Security
+
+- Integration with industry-standard security tools:
+  - Nmap
+  - Nikto
+  - SSLyze
+  - TestSSL
+  - Gobuster
+  - OWASP ZAP
+  - AWS/Azure/GCloud CLI
+  - CloudSploit
+  - Scout Suite
+  - And more...
+
+- Comprehensive reporting:
+  - JSON output
+  - HTML reports with severity-based findings
+  - Detailed evidence for each finding
+
+## Prerequisites
+
+- Docker and Docker Compose
+- Python 3.8+
+- For cloud security testing:
+  - AWS credentials (if testing AWS resources)
+  - Azure credentials (if testing Azure resources)
+  - GCloud credentials (if testing Google Cloud resources)
+
+## Quick Start
+
+### Using Docker Compose
+
+1. Clone the repository:
+   ```
+   git clone https://github.com/yourusername/owasp-testing-framework.git
+   cd owasp-testing-framework
+   ```
+
+2. Build and run the Docker containers:
+   ```
+   docker-compose build
+   docker-compose up -d
+   ```
+
+3. Run a scan against a target:
+   ```
+   docker-compose exec owasp-framework python owasp_testing_framework.py https://example.com --output-dir /app/results
+   ```
+
+4. View the HTML report:
+   ```
+   firefox results/report.html
+   ```
+
+### Using Python Directly
+
+1. Install the requirements:
+   ```
+   pip install -r requirements.txt
+   ```
+
+2. Install the required tools:
+   ```
+   # Debian/Ubuntu
+   sudo apt-get install nmap nikto gobuster dirb testssl.sh
+   
+   # AWS CLI
+   pip install awscli
+   
+   # Azure CLI
+   curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+   
+   # Google Cloud SDK
+   curl https://sdk.cloud.google.com | bash
+   ```
+
+3. Run a scan:
+   ```
+   python owasp_testing_framework.py https://example.com --output-dir results
+   ```
+
+## Configuration
+
+You can customize the scanning behavior using a configuration file:
+
+```json
+{
+  "scan_timeout": 3600,
+  "tool_paths": {
+    "nmap": "nmap",
+    "nikto": "nikto",
+    "sslyze": "sslyze",
+    "testssl": "testssl.sh",
+    "dirb": "dirb",
+    "gobuster": "gobuster",
+    "zap": "zap-cli",
+    "aws": "aws",
+    "azure": "az",
+    "gcloud": "gcloud"
+  },
+  "scan_depth": "normal",
+  "exclude_tests": []
+}
+```
+
+Run with a custom configuration:
+```
+python owasp_testing_framework.py https://example.com --config my_config.json
+```
+
+## Running Individual Tests
+
+You can run specific test modules instead of the full suite:
+
+```
+python owasp_testing_framework.py https://example.com --module network_infrastructure,http_methods,http_security
+```
+
+Available modules:
+- `network_infrastructure`: Test Network Infrastructure Configuration
+- `platform_configuration`: Test Application Platform Configuration
+- `file_extensions`: Test File Extensions Handling
+- `backups`: Review Old Backup and Unreferenced Files
+- `admin_interfaces`: Enumerate Admin Interfaces
+- `http_methods`: Test HTTP Methods
+- `http_security`: Test HTTP Security Headers
+- `cross_domain`: Test RIA Cross Domain Policy
+- `file_permissions`: Test File Permissions
+- `subdomain_takeover`: Test for Subdomain Takeover
+- `cloud_storage`: Test Cloud Storage
+
+## Understanding Results
+
+The framework generates:
+
+1. **JSON Results File**: Contains all raw findings and details
+2. **HTML Report**: Interactive report with findings organized by severity and module
+3. **Tool-specific output files**: Raw output from individual tools
+
+Findings are categorized by severity:
+- **Critical**: Issues that require immediate attention
+- **High**: Serious security concerns
+- **Medium**: Important issues but lower risk
+- **Low**: Minor security concerns
+- **Info**: Informational findings
+
+## Extending the Framework
+
+### Adding New Test Modules
+
+Create a new Python class that inherits from `BaseTestModule`:
+
+```python
+class MyCustomTestModule(BaseTestModule):
+    """Description of the test module"""
+    
+    def run(self) -> Dict:
+        results = {
+            "name": "My Custom Test",
+            "findings": []
+        }
+        
+        # Implement your test logic here
+        
+        return results
+```
+
+Then add it to the `test_modules` dictionary in the `OWASPTestingFramework` constructor.
+
+### Integration with CI/CD
+
+The framework can be integrated into CI/CD pipelines:
+
+```yaml
+# Example GitLab CI configuration
+security_scan:
+  stage: test
+  image: yourusername/owasp-testing-framework
+  script:
+    - python owasp_testing_framework.py $CI_ENVIRONMENT_URL --output-dir results
+  artifacts:
+    paths:
+      - results/
+```
+
+## Best Practices
+
+1. **Start with limited scope**: Use `--module` to run specific tests initially
+2. **Watch your resources**: Some tests (like subdomain enumeration) can be resource-intensive
+3. **Customize scan depth**: Use the `scan_depth` setting in config to balance speed vs. thoroughness
+4. **Verify findings**: Always verify findings manually to eliminate false positives
+5. **Regular scanning**: Schedule regular scans to detect new vulnerabilities
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Acknowledgements
+
+- OWASP Foundation for their testing guidelines
+- All the developers of the security tools integrated into this framework
