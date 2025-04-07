@@ -1,0 +1,124 @@
+version: '3'
+
+services:
+  # Main OWASP Testing Framework
+  owasp-framework:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./:/app
+      - ~/.aws:/root/.aws:ro
+      - ~/.azure:/root/.azure:ro
+      - ~/.config/gcloud:/root/.config/gcloud:ro
+    network_mode: "host"
+    depends_on:
+      - zap-proxy
+    environment:
+      - ZAP_API_ADDRESS=http://localhost:8080
+    command: tail -f /dev/null  # Keep container running
+
+  # OWASP ZAP Proxy
+  zap-proxy:
+    image: owasp/zap2docker-stable
+    ports:
+      - "8080:8080"
+      - "8090:8090"
+    command: zap.sh -daemon -host 0.0.0.0 -port 8080 -config api.disablekey=true
+    volumes:
+      - ./zap-data:/home/zap/.ZAP
+
+  # OWASP Dependency-Check
+  dependency-check:
+    image: owasp/dependency-check
+    volumes:
+      - ./:/src
+      - ./odc-data:/usr/share/dependency-check/data
+    command: --scan /src --format "ALL" --out /src/owasp_results/dependency-check
+
+  # Nikto Scanner
+  nikto:
+    image: secfigo/nikto
+    volumes:
+      - ./:/tmp/scan
+    command: -h target.example.com -output /tmp/scan/owasp_results/nikto_scan.txt
+    profiles:
+      - tools
+
+  # SSLyze
+  sslyze:
+    image: nablac0d3/sslyze
+    volumes:
+      - ./:/tmp/scan
+    command: --json_out /tmp/scan/owasp_results/sslyze_scan.json target.example.com
+    profiles:
+      - tools
+
+  # Gobuster
+  gobuster:
+    image: secfigo/gobuster
+    volumes:
+      - ./:/tmp/scan
+      - ./wordlists:/wordlists
+    command: dir -u target.example.com -w /wordlists/common.txt -o /tmp/scan/owasp_results/gobuster_scan.txt
+    profiles:
+      - tools
+
+  # Amass for Subdomain Enumeration
+  amass:
+    image: caffix/amass
+    volumes:
+      - ./:/tmp/scan
+    command: enum -d example.com -o /tmp/scan/owasp_results/amass_subdomains.txt
+    profiles:
+      - tools
+
+  # Nuclei for Vulnerability Scanning
+  nuclei:
+    image: projectdiscovery/nuclei
+    volumes:
+      - ./:/tmp/scan
+    command: -u target.example.com -o /tmp/scan/owasp_results/nuclei_scan.txt
+    profiles:
+      - tools
+
+  # Cloud Security Scanners
+  cloudsploit:
+    image: aquasec/cloudsploit
+    volumes:
+      - ./:/tmp/scan
+      - ~/.aws:/root/.aws:ro
+    command: scan --console --json /tmp/scan/owasp_results/cloudsploit_aws.json
+    profiles:
+      - cloud
+
+  # Scout Suite for AWS/Azure/GCP
+  scoutsuite:
+    image: securityscorecard/scout
+    volumes:
+      - ./:/tmp/scan
+      - ~/.aws:/root/.aws:ro
+      - ~/.azure:/root/.azure:ro
+      - ~/.config/gcloud:/root/.config/gcloud:ro
+    command: aws --report-dir /tmp/scan/owasp_results/scoutsuite
+    profiles:
+      - cloud
+
+  # Trivy for Container Security
+  trivy:
+    image: aquasec/trivy
+    volumes:
+      - ./:/tmp/scan
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: image --format json --output /tmp/scan/owasp_results/trivy_results.json alpine:latest
+    profiles:
+      - tools
+
+  # SQLMap for SQL Injection Testing
+  sqlmap:
+    image: paoloo/sqlmap
+    volumes:
+      - ./:/tmp/scan
+    command: -u "http://target.example.com/page.php?id=1" --batch --output-dir /tmp/scan/owasp_results/sqlmap/
+    profiles:
+      - tools
