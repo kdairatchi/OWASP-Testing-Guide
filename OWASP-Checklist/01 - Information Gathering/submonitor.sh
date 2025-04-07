@@ -10,8 +10,12 @@
 # - amass (https://github.com/owasp-amass/amass)
 # - assetfinder (https://github.com/tomnomnom/assetfinder)
 # - findomain (https://github.com/Findomain/Findomain)
+# - bbot (https://github.com/blacklanternsecurity/bbot)
 # - notify (https://github.com/projectdiscovery/notify)
 # - anew (https://github.com/tomnomnom/anew)
+# - whatweb (https://github.com/urbanadventurer/whatweb)
+# - webanalyze (https://github.com/rverton/webanalyze)
+# - httpx (https://github.com/projectdiscovery/httpx)
 
 # ===== CONFIGURATION =====
 # Directory structure
@@ -21,6 +25,7 @@ RESULTS_DIR="$WORKSPACE/results"
 LOGS_DIR="$WORKSPACE/logs"
 TEMP_DIR="$WORKSPACE/temp"
 CONFIG_DIR="$WORKSPACE/config"
+TECH_DIR="$WORKSPACE/tech-data"
 
 # Notify configuration
 NOTIFY_CONFIG="$CONFIG_DIR/notify-config.yaml"
@@ -33,6 +38,12 @@ MAX_PARALLEL=5
 
 # API keys file
 API_KEYS="$CONFIG_DIR/api-keys.txt"
+
+# Technology scanning options
+TECH_SCAN=true                  # Set to false to disable technology scanning
+TECH_SCAN_TIMEOUT=30            # Timeout for technology scanning in seconds
+SCAN_PORTS="80,443,8080,8443"   # Ports to scan during technology fingerprinting
+BBOT_MODULES="fast"             # BBOT scan modules to use (options: passive, fast, active, aggressive)
 
 # ===== COLORS FOR OUTPUT =====
 GREEN="\033[0;32m"
@@ -66,7 +77,7 @@ check_requirements() {
     
     local missing_tools=()
     
-    for tool in subfinder amass assetfinder findomain notify anew jq; do
+    for tool in subfinder amass assetfinder findomain bbot notify anew jq whatweb webanalyze httpx; do
         if ! command -v "$tool" &> /dev/null; then
             missing_tools+=("$tool")
         fi
@@ -86,7 +97,7 @@ setup_workspace() {
     echo -e "${YELLOW}[*] Setting up workspace...${NC}"
     
     # Create directories if they don't exist
-    for dir in "$WORKSPACE" "$RESULTS_DIR" "$LOGS_DIR" "$TEMP_DIR" "$CONFIG_DIR"; do
+    for dir in "$WORKSPACE" "$RESULTS_DIR" "$LOGS_DIR" "$TEMP_DIR" "$CONFIG_DIR" "$TECH_DIR"; do
         if [ ! -d "$dir" ]; then
             mkdir -p "$dir"
             echo -e "${GREEN}[+] Created directory: $dir${NC}"
@@ -239,6 +250,7 @@ enumerate_subdomains() {
     local amass_output="$TEMP_DIR/$domain-amass-$timestamp.txt"
     local assetfinder_output="$TEMP_DIR/$domain-assetfinder-$timestamp.txt"
     local findomain_output="$TEMP_DIR/$domain-findomain-$timestamp.txt"
+    local bbot_output="$TEMP_DIR/$domain-bbot-$timestamp.txt"
     
     # Run tools in parallel
     echo -e "${CYAN}[*] Running subfinder...${NC}"
@@ -257,6 +269,10 @@ enumerate_subdomains() {
     findomain --quiet -t "$domain" -u "$findomain_output" &
     pid_findomain=$!
     
+    echo -e "${CYAN}[*] Running bbot...${NC}"
+    bbot -t "$domain" -f subdomain-enum -m "$BBOT_MODULES" --no-scan-topdomains -o txt:"$bbot_output" &
+    pid_bbot=$!
+    
     # Wait for all processes to finish
     wait $pid_subfinder
     echo -e "${GREEN}[+] Subfinder finished!${NC}"
@@ -270,15 +286,19 @@ enumerate_subdomains() {
     wait $pid_findomain
     echo -e "${GREEN}[+] Findomain finished!${NC}"
     
+    wait $pid_bbot
+    echo -e "${GREEN}[+] BBOT finished!${NC}"
+    
     # Combine and sort results
     echo -e "${BLUE}[*] Combining results...${NC}"
-    cat "$subfinder_output" "$amass_output" "$assetfinder_output" "$findomain_output" | sort -u > "$all_subdomains"
+    cat "$subfinder_output" "$amass_output" "$assetfinder_output" "$findomain_output" "$bbot_output" | sort -u > "$all_subdomains"
     
     # Count subdomains found by each tool
     local subfinder_count=$(wc -l < "$subfinder_output")
     local amass_count=$(wc -l < "$amass_output")
     local assetfinder_count=$(wc -l < "$assetfinder_output")
     local findomain_count=$(wc -l < "$findomain_output")
+    local bbot_count=$(wc -l < "$bbot_output")
     local total_count=$(wc -l < "$all_subdomains")
     
     echo -e "${GREEN}[+] Results combined!${NC}"
@@ -287,6 +307,7 @@ enumerate_subdomains() {
     echo -e "  ${PURPLE}Amass:${NC}        $amass_count subdomains"
     echo -e "  ${PURPLE}Assetfinder:${NC}  $assetfinder_count subdomains"
     echo -e "  ${PURPLE}Findomain:${NC}    $findomain_count subdomains"
+    echo -e "  ${PURPLE}BBOT:${NC}         $bbot_count subdomains"
     echo -e "  ${PURPLE}Total unique:${NC} $total_count subdomains"
     
     # Check for new subdomains
@@ -301,6 +322,19 @@ enumerate_subdomains() {
             # Update the all.txt file
             cat "$new_subdomains" >> "$previous_all"
             
+            # Filter live subdomains
+            local new_live_subdomains="$TEMP_DIR/$domain-new-live-$timestamp.txt"
+            echo -e "${BLUE}[*] Checking for live subdomains...${NC}"
+            cat "$new_subdomains" | httpx -silent -timeout 10 -retries 2 -status-code -title -follow-redirects > "$new_live_subdomains"
+            local live_count=$(wc -l < "$new_live_subdomains")
+            echo -e "${GREEN}[+] Found $live_count live subdomains!${NC}"
+            
+            # Perform technology scanning if enabled
+            local tech_report=""
+            if [ "$TECH_SCAN" = true ] && [ $live_count -gt 0 ]; then
+                tech_report=$(scan_technologies "$domain" "$new_live_subdomains" "$timestamp")
+            fi
+            
             # Send notification
             if [ -f "$NOTIFY_CONFIG" ]; then
                 echo -e "${BLUE}[*] Sending notification...${NC}"
@@ -312,6 +346,7 @@ enumerate_subdomains() {
                     echo "**Domain:** $domain"
                     echo "**Time:** $(date)"
                     echo "**New subdomains found:** $new_count"
+                    echo "**Live subdomains:** $live_count"
                     echo ""
                     echo "### New Subdomains:"
                     echo '```'
@@ -323,7 +358,14 @@ enumerate_subdomains() {
                     echo "- Amass: $amass_count"
                     echo "- Assetfinder: $assetfinder_count"
                     echo "- Findomain: $findomain_count"
+                    echo "- BBOT: $bbot_count"
                     echo "- Total unique: $total_count"
+                    
+                    # Add technology report if available
+                    if [ ! -z "$tech_report" ]; then
+                        echo ""
+                        echo "$tech_report"
+                    fi
                 } > "$notification_file"
                 
                 # Use notify to send the notification
@@ -342,10 +384,87 @@ enumerate_subdomains() {
     fi
     
     # Clean up temporary files
-    rm -f "$subfinder_output" "$amass_output" "$assetfinder_output" "$findomain_output"
+    rm -f "$subfinder_output" "$amass_output" "$assetfinder_output" "$findomain_output" "$bbot_output"
     
     echo -e "${GREEN}[+] Enumeration completed for $domain!${NC}"
     echo ""
+}
+
+# Scan technologies on subdomains
+scan_technologies() {
+    local domain="$1"
+    local subdomains_file="$2"
+    local timestamp="$3"
+    local tech_dir="$TECH_DIR/$domain"
+    local whatweb_output="$tech_dir/whatweb-$timestamp.json"
+    local webanalyze_output="$tech_dir/webanalyze-$timestamp.json"
+    local tech_summary="$tech_dir/tech-summary-$timestamp.md"
+    
+    # Create tech directory if it doesn't exist
+    if [ ! -d "$tech_dir" ]; then
+        mkdir -p "$tech_dir"
+    fi
+    
+    echo -e "${BLUE}[*] Scanning technologies on new subdomains...${NC}"
+    
+    # Run whatweb
+    echo -e "${CYAN}[*] Running whatweb...${NC}"
+    cat "$subdomains_file" | cut -d ' ' -f 1 | whatweb --no-errors --timeout $TECH_SCAN_TIMEOUT --max-threads 10 -a 3 --log-json="$whatweb_output" > /dev/null
+    
+    # Run webanalyze
+    echo -e "${CYAN}[*] Running webanalyze...${NC}"
+    cat "$subdomains_file" | cut -d ' ' -f 1 | webanalyze -apps "$HOME/.webanalyze/apps.json" -hosts stdin -output json > "$webanalyze_output"
+    
+    # Generate summary report
+    echo -e "${CYAN}[*] Generating technology report...${NC}"
+    {
+        echo "### 🔍 Technology Analysis"
+        echo ""
+        
+        # Process whatweb results
+        echo "#### WhatWeb Findings:"
+        echo ""
+        if [ -s "$whatweb_output" ]; then
+            # Extract the most common technologies
+            echo "Most common technologies detected:"
+            echo ""
+            jq -r '.[] | .plugins | keys[]' "$whatweb_output" 2>/dev/null | sort | uniq -c | sort -nr | head -10 | while read count tech; do
+                echo "- $tech ($count instances)"
+            done
+            echo ""
+            
+            # Extract interesting findings (frameworks, CMS, etc.)
+            echo "Interesting findings:"
+            echo ""
+            grep -i -E 'wordpress|joomla|drupal|bootstrap|jquery|react|angular|php|laravel|django|flask|nginx|apache|aws|cloudflare|waf|firewall' "$whatweb_output" | 
+            jq -r '.[] | .target + " -> " + (.plugins | keys | join(", "))' 2>/dev/null | head -10 | while read line; do
+                echo "- $line"
+            done
+        else
+            echo "No WhatWeb data available"
+        fi
+        
+        echo ""
+        
+        # Process webanalyze results
+        echo "#### WebAnalyze Findings:"
+        echo ""
+        if [ -s "$webanalyze_output" ]; then
+            # Extract the most common technologies
+            echo "Most common technologies detected:"
+            echo ""
+            jq -r '.[] | .matches[] | .app' "$webanalyze_output" 2>/dev/null | sort | uniq -c | sort -nr | head -10 | while read count tech; do
+                echo "- $tech ($count instances)"
+            done
+        else
+            echo "No WebAnalyze data available"
+        fi
+    } > "$tech_summary"
+    
+    echo -e "${GREEN}[+] Technology scanning completed!${NC}"
+    
+    # Return the summary for notification
+    cat "$tech_summary"
 }
 
 # Main function
