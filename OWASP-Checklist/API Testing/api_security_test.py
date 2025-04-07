@@ -14,7 +14,7 @@ This script automates testing for the OWASP API Security Top 10 vulnerabilities:
 - API-SEC-009: Improper Assets Management
 - API-SEC-010: Insufficient Logging & Monitoring
 
-Author: Security Team
+Author: Kdairatchi
 Version: 1.0.0
 License: MIT
 """
