@@ -1,0 +1,88 @@
+{
+    "scan_depth": 3,
+    "concurrent_requests": 10,
+    "request_delay": 0.1,
+    "timeout": 30,
+    "user_agent": "OWASP-BusLogicTester/1.0",
+    "follow_redirects": true,
+    "test_modules": {
+        "OTG-BUSLOGIC-001": true,
+        "OTG-BUSLOGIC-002": true,
+        "OTG-BUSLOGIC-003": true,
+        "OTG-BUSLOGIC-004": true,
+        "OTG-BUSLOGIC-005": true,
+        "OTG-BUSLOGIC-006": true,
+        "OTG-BUSLOGIC-007": true,
+        "OTG-BUSLOGIC-008": true,
+        "OTG-BUSLOGIC-009": true
+    },
+    "exclude_paths": [
+        "/logout",
+        "/admin",
+        "/static"
+    ],
+    "custom_headers": {
+        "X-Custom-Header": "Value"
+    },
+    "file_upload_tests": {
+        "test_files_dir": "./test_files",
+        "extensions": [".pdf", ".doc", ".jpg", ".zip", ".csv", ".svg", ".html", ".js", ".php"]
+    },
+    "workflow_definitions": [
+        {
+            "name": "user_registration",
+            "steps": [
+                {
+                    "url": "https://example.com/register",
+                    "method": "GET"
+                },
+                {
+                    "url": "https://example.com/register/submit",
+                    "method": "POST"
+                },
+                {
+                    "url": "https://example.com/register/confirm",
+                    "method": "GET"
+                }
+            ],
+            "critical": true
+        },
+        {
+            "name": "checkout_process",
+            "steps": [
+                {
+                    "url": "https://example.com/cart",
+                    "method": "GET"
+                },
+                {
+                    "url": "https://example.com/checkout",
+                    "method": "GET"
+                },
+                {
+                    "url": "https://example.com/checkout/address",
+                    "method": "POST"
+                },
+                {
+                    "url": "https://example.com/checkout/payment",
+                    "method": "POST"
+                },
+                {
+                    "url": "https://example.com/checkout/confirm",
+                    "method": "POST"
+                }
+            ],
+            "critical": true
+        }
+    ],
+    "auth": {
+        "type": "form",
+        "login_url": "https://example.com/login",
+        "username_field": "username",
+        "password_field": "password",
+        "username": "test_user",
+        "password": "test_password",
+        "additional_fields": {
+            "csrf_token": "TOKEN_VALUE"
+        }
+    }
+}
